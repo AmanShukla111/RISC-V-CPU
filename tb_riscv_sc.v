@@ -25,7 +25,7 @@ initial begin
     #10 start = 1;
 
     // Monitor and display signals
-    $monitor("Time=%0t, PC=%h, ALUoperand2=%d, Instruction=%b, ALU_Result=%d, ReadData1=%h, ReadData2=%h, WriteData=%h, Branch=%b, MemRead=%b, MemToReg=%b, MemWrite=%b, ALUSrc=%b, RegWrite=%b",
+    $monitor("Time=%0t, PC=%h, ALUoperand2=%h, Instruction=%h, ALU_Result=%d, ReadData1=%h, ReadData2=%h, WriteData=%h, Branch=%b, MemRead=%b, MemToReg=%b, MemWrite=%b, ALUSrc=%b, RegWrite=%b",
              $time, riscv_DUT.pc_current,riscv_DUT.alu_operand2, riscv_DUT.instruction, riscv_DUT.alu_result, 
              riscv_DUT.read_data1, riscv_DUT.read_data2, riscv_DUT.write_data, 
              riscv_DUT.branch, riscv_DUT.mem_read, riscv_DUT.mem_to_reg, 

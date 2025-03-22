@@ -1,37 +1,39 @@
 module ImmGen #(parameter Width = 32) (
-    input [Width-1:0] inst,
-    output reg signed [Width-1:0] imm
+    input  [31:0] instruction,
+    output reg [31:0] imm
 );
-    // ImmGen generate imm value based on opcode and instruction type
 
-    wire [6:0] opcode = inst[6:0];
+    wire [6:0] opcode = instruction[6:0];
 
-    always @(*) 
-    begin
-        case(opcode)
-            // R-type instructions (ADD, SUB) don't use immediates
-            7'b0110011: imm = 32'b0;
+    always @(*) begin
+        case (opcode)
+            // I-type
+            7'b0000011, // LOAD
+            7'b0010011, // I-type ALU
+            7'b1100111: // JALR
+                // immediate is instruction[31:20], sign-extended
+                imm = {{20{instruction[31]}}, instruction[31:20]};
 
-            // I-type instructions (LW, ADDI, SLLI, ORI)
-            7'b0000011, // LW
-            7'b0010011: // ADDI, SLLI, ORI
-                case(inst[14:12]) // funct3
-                    3'b001: imm = {27'b0, inst[24:20]}; // SLLI
-                    default: imm = {{20{inst[31]}}, inst[31:20]}; // LW, ADDI, ORI
-                endcase
+            // S-type
+            7'b0100011: // STORE
+                imm = {{20{instruction[31]}}, instruction[31:25], instruction[11:7]};
 
-            // S-type instructions (SW)
-            7'b0100011: imm = {{20{inst[31]}}, inst[31:25], inst[11:7]};
+            // B-type
+            7'b1100011: // BRANCH
+                imm = {{20{instruction[31]}}, instruction[7], instruction[30:25], instruction[11:8]};
 
-            // B-type instructions (BEQ, BGT)
-            7'b1100011: imm = {{20{inst[31]}}, inst[7], inst[30:25], inst[11:8], 1'b0};
+            // U-type
+            7'b0110111, // LUI
+            7'b0010111: // AUIPC
+                imm = {instruction[31:12], 12'b0};
 
-            // J-type instruction (JAL)
-            7'b1101111: imm = {{12{inst[31]}}, inst[19:12], inst[20], inst[30:21], 1'b0};
+            // J-type
+            7'b1101111: // JAL
+                imm = {{12{instruction[31]}}, instruction[19:12], instruction[20], instruction[30:21]};
 
-            // Default case
-            default: imm = 32'b0; // Default to 0 for unsupported opcodes
+            // default
+            default: imm = 32'b0;
         endcase
     end
-            
+
 endmodule
