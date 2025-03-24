@@ -157,7 +157,7 @@ module PipelinedCPU (
     //----------------------------------------
     // StageEX
     //----------------------------------------
-    wire [31:0] aluResult_EX, aluResult_MEM;
+    wire [31:0] aluResult_EX, aluResult_MEM, storeData_EX;
     wire        zero_EX;
     wire        branchTaken_EX;
 
@@ -190,7 +190,8 @@ module PipelinedCPU (
         // outputs
         .aluResult_out(aluResult_EX),
         .zero_out(zero_EX),
-        .branchTaken_out(branchTaken_EX)
+        .branchTaken_out(branchTaken_EX),
+        .storeData_out(storeData_EX)
     );
 
     //-----------
@@ -209,7 +210,7 @@ module PipelinedCPU (
         .memWrite_in(memWrite_EX),
 
         .aluResult_in(aluResult_EX),
-        .writeData_in(rdData2_EX),
+        .writeData_in(storeData_EX),
         .rd_in(rd_EX),
 
         .regWrite_out(regWrite_MEM),

@@ -5,8 +5,6 @@ module Register (
     input [4:0] readReg2_ID,
     output [31:0] readData1_ID,
     output [31:0] readData2_ID,
-
-    // Write Port (WB Stage)
     input regWrite_WB,
     input [4:0] writeReg_WB,
     input [31:0] writeData_WB

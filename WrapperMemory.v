@@ -89,12 +89,7 @@ module WrapperMemory(
         if (memRead) begin
             case (funct3)
                 3'b000: begin // LB
-                    case (byteOffset)
-                        2'b00: finalReadData = {{24{mem_read_data[7]}},  mem_read_data[7:0]};
-                        2'b01: finalReadData = {{24{mem_read_data[15]}}, mem_read_data[15:8]};
-                        2'b10: finalReadData = {{24{mem_read_data[23]}}, mem_read_data[23:16]};
-                        2'b11: finalReadData = {{24{mem_read_data[31]}}, mem_read_data[31:24]};
-                    endcase
+                    finalReadData = mem_read_data;
                 end
 
                 3'b001: begin // LH

@@ -25,7 +25,7 @@ initial begin
     #10 start = 1;
 
     $monitor($time, 
-        " | IF.pc=%h | ID.instr=%b rs1_ID=%d rs2_ID=%d | EX.pc=%h EX.alu=%d zero=%b branchTaken=%b regWrite_WB=%b finalWBData=%d rd_WB=%d, memWrite_EX=%b",
+        " | IF.pc=%h | ID.instr=%h rs1_ID=%d rs2_ID=%d | EX.pc=%h EX.alu=%d zero=%b branchTaken=%b regWrite_WB=%b finalWBData=%d rd_WB=%d, memWrite_EX=%b, writeData_MEM=%d",
         riscv_DUT.pc_IF,
         riscv_DUT.instr_ID,
         riscv_DUT.rs1_ID,

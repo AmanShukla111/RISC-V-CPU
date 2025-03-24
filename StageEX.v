@@ -10,7 +10,7 @@ module StageEX(
     // from ID/EX pipeline
     input  [31:0] pc_EX,
     input  [31:0] readData1_EX,
-    input  [31:0] readData2_EX,
+    input  [31:0] readData2_EX,  // Original store data from register file
     input  [31:0] imm_EX,
     input  [4:0]  rs1_EX,
     input  [4:0]  rs2_EX,
@@ -36,7 +36,8 @@ module StageEX(
     // outputs
     output [31:0] aluResult_out,
     output        zero_out,
-    output        branchTaken_out
+    output        branchTaken_out,
+    output [31:0] storeData_out
 );
 
     // Forwarding
@@ -71,7 +72,8 @@ module StageEX(
         endcase
     end
 
-    // ALUSrc
+    // For ALU operation, if ALUSrc_EX is 1 (e.g., for load, store address calculation),
+    // the ALU operand B is the immediate. Otherwise, it's the forwarded value.
     wire [31:0] aluOperandB = (ALUSrc_EX) ? imm_EX : forwardB_val;
 
     // ALU Control
@@ -94,11 +96,12 @@ module StageEX(
         .zero(zero)
     );
 
-    // Branch decision
+    // Branch decision (for branch instructions)
     wire branchTaken = branch_EX && (zero == 1'b1);
+    wire [31:0] storeData = (forwardB != 2'b00) ? forwardB_val : readData2_EX;
 
-    assign aluResult_out     = aluResult;
-    assign zero_out          = zero;
-    assign branchTaken_out   = branchTaken;
-
+    assign aluResult_out   = aluResult;
+    assign zero_out        = zero;
+    assign branchTaken_out = branchTaken;
+    assign storeData_out   = storeData;
 endmodule
