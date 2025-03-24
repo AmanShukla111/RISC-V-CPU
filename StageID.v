@@ -25,6 +25,7 @@ module StageID(
     output [4:0]  rs1_ID,
     output [4:0]  rs2_ID,
     output [4:0]  rd_ID,
+    output       isStore_ID,
 
     // Control signals out
     output        branch_ID,
@@ -43,6 +44,8 @@ module StageID(
     assign rs1_ID = instr_ID[19:15];
     assign rs2_ID = instr_ID[24:20];
     assign rd_ID  = instr_ID[11:7];
+    assign isStore_ID = (memWrite_ID == 1); 
+
 
     wire [2:0] funct3_ID = instr_ID[14:12];
     wire [6:0] opcode_ID  = instr_ID[6:0];
@@ -62,7 +65,7 @@ module StageID(
 
     // Single unified register file
     wire [31:0] rawReadData1, rawReadData2;
-    RegisterFile regFile(
+    Register regFile(
         .clk(clk),
         .rst(run), // run=0 => reset
         // read ports

@@ -1,3 +1,5 @@
+`include "DataMemory.v"
+
 module WrapperMemory(
     input         clk,
     input         rst,    

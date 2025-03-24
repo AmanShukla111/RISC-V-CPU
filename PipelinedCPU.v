@@ -1,22 +1,20 @@
-`include "PC.v"
-`include "Adder.v"
-`include "InstructionMemory.v"
-`include "Control.v"
-`include "Register.v"
-`include "ImmGen.v"
-`include "ShiftLeftOne.v"
-`include "Mux2to1.v"
-`include "ALUCtrl.v"
-`include "ALU.v"
-`include "DataMemory.v"
-`include "WrapperMemory.v"
-`include "HazardDetection.v"
-`include "ForwardingUnit.v"
+//------------------//
+// PipelinedCPU.v
+//------------------//
+`include "StageIF.v"
+`include "StageID.v"
+`include "StageEX.v"
+`include "StageMEM.v"
+`include "StageWB.v"
 
+// pipeline registers
 `include "IF_ID_PipelineReg.v"
 `include "ID_EX_PipelineReg.v"
 `include "EX_MEM_PipelineReg.v"
 `include "MEM_WB_PipelineReg.v"
+
+// hazard, forwarding, etc.
+`include "HazardDetection.v"
 
 module PipelinedCPU (
     input clk,
@@ -24,45 +22,31 @@ module PipelinedCPU (
 );
 
     //----------------------------------------
-    // Stage 1: IF
+    // StageIF
     //----------------------------------------
-    wire [31:0] pc_IF, pcNext_IF, pcPlus4_IF, instr_IF;
+    wire [31:0] pc_IF, pcPlus4_IF, instr_IF;
+    reg pcWrite;
+    wire [31:0] pcNext_IF;
 
-    reg  pcWrite;      // to stall the PC
-    wire if_id_write;  // to stall IF/ID pipeline
-    wire if_id_flush;  // to flush IF/ID on branch
-
-    // PC register
-    reg [31:0] pc_reg;
-    always @(posedge clk) begin
-        if (!start) begin          
-            pc_reg <= 32'b0;
-        end else if (pcWrite) begin
-            pc_reg <= pcNext_IF;
-        end
-    end
-    assign pc_IF = pc_reg;
-
-    // Instruction Memory
-    InstructionMemory m_InstMem(
-        .readAddr(pc_IF),
-        .inst(instr_IF)
+    StageIF stageIF(
+        .clk(clk),
+        .run(start),
+        .pcWrite(pcWrite),
+        .pcNext_IF(pcNext_IF),
+        .pc_IF(pc_IF),
+        .pcPlus4_IF(pcPlus4_IF),
+        .instr_IF(instr_IF)
     );
 
-    // pc + 4
-    Adder adder_if_pcplus4(
-        .a(pc_IF),
-        .b(32'd4),
-        .sum(pcPlus4_IF)
-    );
-
-    //----------------------------------------
-    // IF/ID Pipeline Register
-    //----------------------------------------
+    //-----------
+    // IF/ID pipeline
+    //-----------
     wire [31:0] pc_ID, instr_ID;
+    wire if_id_write, if_id_flush;
+
     IF_ID_PipelineReg if_id_reg(
         .clk(clk),
-        .rst(start),        // active-high reset now
+        .rst(start),
         .if_id_write(if_id_write),
         .flush(if_id_flush),
         .pc_in(pc_IF),
@@ -72,68 +56,60 @@ module PipelinedCPU (
     );
 
     //----------------------------------------
-    // Stage 2: ID
+    // StageID
     //----------------------------------------
-    wire [31:0] imm_ID;
+    wire [31:0] imm_ID, readData1_ID, readData2_ID, pc_out_ID;
+    wire [4:0]  rs1_ID, rs2_ID, rd_ID;
     wire [1:0]  ALUOp_ID;
-    wire memRead_ID, memWrite_ID, memToReg_ID, regWrite_ID, ALUSrc_ID;
-    wire branch_ID;
-    reg [31:0] readData1_ID, readData2_ID;
+    wire        memRead_ID, memWrite_ID, memToReg_ID, regWrite_ID, ALUSrc_ID, branch_ID;
+    wire        detectDeadcode_ID;
 
-    wire [4:0] rs1_ID = instr_ID[19:15];
-    wire [4:0] rs2_ID = instr_ID[24:20];
-    wire [4:0] rd_ID  = instr_ID[11:7];
-
-    // Control
-    Control m_Control(
-        .opcode(instr_ID[6:0]),
-        .funct3(instr_ID[14:12]),
-        .branch(branch_ID), 
-        .memRead(memRead_ID),
-        .memtoReg(memToReg_ID),
-        .ALUOp(ALUOp_ID),
-        .memWrite(memWrite_ID),
-        .ALUSrc(ALUSrc_ID),
-        .regWrite(regWrite_ID)
-    );
-
-    wire [31:0] rawReadData1_ID, rawReadData2_ID;
-
-    Register regFile (
+    StageID stageID(
         .clk(clk),
-        .rst(start),
-        .readReg1_ID(rs1_ID), 
-        .readReg2_ID(rs2_ID),
-        .readData1_ID(rawReadData1_ID),
-        .readData2_ID(rawReadData2_ID),
+        .run(start),
+        .pc_ID(pc_ID),
+        .instr_ID(instr_ID),
+
+        // from WB
         .regWrite_WB(regWrite_WB),
-        .writeReg_WB(rd_WB),
-        .writeData_WB(finalWBData)
+        .rd_WB(rd_WB),
+        .finalWBData(finalWBData),
+
+        // to ID/EX
+        .pc_out_ID(pc_out_ID),
+        .imm_ID(imm_ID),
+        .readData1_ID(readData1_ID),
+        .readData2_ID(readData2_ID),
+        .rs1_ID(rs1_ID),
+        .rs2_ID(rs2_ID),
+        .rd_ID(rd_ID),
+
+        // control out
+        .branch_ID(branch_ID),
+        .memRead_ID(memRead_ID),
+        .memWrite_ID(memWrite_ID),
+        .memToReg_ID(memToReg_ID),
+        .regWrite_ID(regWrite_ID),
+        .ALUSrc_ID(ALUSrc_ID),
+        .ALUOp_ID(ALUOp_ID),
+
+        .detectDeadcode_ID(detectDeadcode_ID)
     );
 
-
-    // ImmGen
-    ImmGen #(32) m_ImmGen(
-        .instruction(instr_ID),
-        .imm(imm_ID)
-    );
-
-    //----------------------------------------
-    // ID/EX Pipeline Register
-    //----------------------------------------
+    //-----------
+    // ID/EX pipeline
+    //-----------
     wire [31:0] pc_EX, rdData1_EX, rdData2_EX, imm_EX;
-    wire [4:0]  rd_EX, rs1_EX, rs2_EX;
+    wire [4:0]  rs1_EX, rs2_EX, rd_EX;
     wire [2:0]  funct3_EX;
     wire        funct7b5_EX;
-    wire        memRead_EX, memWrite_EX, memToReg_EX, regWrite_EX, ALUSrc_EX, branch_EX;
     wire [1:0]  ALUOp_EX;
-
-    wire id_ex_write;
-    wire id_ex_flush;
+    wire        memRead_EX, memWrite_EX, memToReg_EX, regWrite_EX, ALUSrc_EX, branch_EX;
+    wire id_ex_write, id_ex_flush;
 
     ID_EX_PipelineReg id_ex_reg(
         .clk(clk),
-        .rst(start),    // active-high reset
+        .rst(start),
         .writeEnable(id_ex_write),
         .flush(id_ex_flush),
 
@@ -147,7 +123,7 @@ module PipelinedCPU (
         .ALUSrc_in(ALUSrc_ID),
 
         // data in
-        .pc_in(pc_ID),
+        .pc_in(pc_out_ID),
         .readData1_in(readData1_ID),
         .readData2_in(readData2_ID),
         .imm_in(imm_ID),
@@ -178,110 +154,51 @@ module PipelinedCPU (
         .funct7b5_out(funct7b5_EX)
     );
 
-    // If your ID stage has 'instr_ID' as the 32-bit instruction
-    reg [3:0] stopCounter = 0;
-    reg detectingDeadcode = 0;
-
-    always @(posedge clk) begin
-        if (!start) begin
-            stopCounter <= 0;
-            detectingDeadcode <= 0;
-        end else begin
-            if (instr_ID == 32'hDEADC0DE && !detectingDeadcode) begin
-                detectingDeadcode <= 1;
-                stopCounter <= 3;
-            end
-            else if (detectingDeadcode && stopCounter > 0) begin
-                stopCounter <= stopCounter - 1;
-                if (stopCounter == 1) begin
-                    $display("Reached DEADCODE + drain cycles, stopping sim...");
-                    $finish;
-                end
-            end
-        end
-    end
-
-
     //----------------------------------------
-    // Stage 3: EX
+    // StageEX
     //----------------------------------------
-    wire [1:0] forwardA_EX, forwardB_EX;
-    wire [31:0] aluResult_MEM;
-    wire [31:0] writeData_WB;
+    wire [31:0] aluResult_EX, aluResult_MEM;
+    wire        zero_EX;
+    wire        branchTaken_EX;
 
-    ForwardingUnit fwd_unit(
+    StageEX stageEX(
+        .pc_EX(pc_EX),
+        .readData1_EX(rdData1_EX),
+        .readData2_EX(rdData2_EX),
+        .imm_EX(imm_EX),
         .rs1_EX(rs1_EX),
         .rs2_EX(rs2_EX),
-        .rd_MEM(rd_MEM),
-        .rd_WB(rd_WB),
+        .rd_EX(rd_EX),
+        .funct3_EX(funct3_EX),
+        .funct7b5_EX(funct7b5_EX),
+        .ALUOp_EX(ALUOp_EX),
+        .memRead_EX(memRead_EX),
+        .memWrite_EX(memWrite_EX),
+        .memToReg_EX(memToReg_EX),
+        .regWrite_EX(regWrite_EX),
+        .ALUSrc_EX(ALUSrc_EX),
+        .branch_EX(branch_EX),
+
+        // forwarding
+        .aluResult_MEM(aluResult_MEM),
+        .writeData_WB(finalWBData),
         .regWrite_MEM(regWrite_MEM),
         .regWrite_WB(regWrite_WB),
-        .forwardA(forwardA_EX),
-        .forwardB(forwardB_EX)
+        .rd_MEM(rd_MEM),
+        .rd_WB(rd_WB),
+
+        // outputs
+        .aluResult_out(aluResult_EX),
+        .zero_out(zero_EX),
+        .branchTaken_out(branchTaken_EX)
     );
 
-    // Shift imm for branch offset
-    wire [31:0] immShifted_EX;
-    ShiftLeftOne sh1(
-        .i(imm_EX),
-        .o(immShifted_EX)
-    );
-
-    // Branch target
-    wire [31:0] branchTarget_EX = pc_EX + immShifted_EX;
-
-    // Forwarding MUX logic
-    reg [31:0] forwardA_val, forwardB_val;
-    always @(*) begin
-        case (forwardA_EX)
-            2'b00: forwardA_val = rdData1_EX;
-            2'b10: forwardA_val = aluResult_MEM;
-            2'b01: forwardA_val = writeData_WB;
-            default: forwardA_val = rdData1_EX;
-        endcase
-    end
-
-    always @(*) begin
-        case (forwardB_EX)
-            2'b00: forwardB_val = rdData2_EX;
-            2'b10: forwardB_val = aluResult_MEM;
-            2'b01: forwardB_val = writeData_WB;
-            default: forwardB_val = rdData2_EX;
-        endcase
-    end
-
-    // ALUSrc mux
-    wire [31:0] aluOperandB_EX = (ALUSrc_EX) ? imm_EX : forwardB_val;
-
-    // ALU Control
-    wire [3:0] aluControl_EX;
-    ALUCtrl alu_ctrl_ex(
-        .ALUOp(ALUOp_EX),
-        .funct7(funct7b5_EX),
-        .funct3(funct3_EX),
-        .ALUCtl(aluControl_EX)
-    );
-
-    // ALU
-    wire [31:0] aluResult_EX;
-    wire        zero_EX;
-    ALU alu_ex(
-        .ALUCtl(aluControl_EX),
-        .A(forwardA_val),
-        .B(aluOperandB_EX),
-        .ALUOut(aluResult_EX),
-        .zero(zero_EX)
-    );
-
-    // Branch decision: e.g. for BEQ => if branch_EX && zero_EX
-    wire branchTaken_EX = branch_EX && zero_EX;
-
-    //----------------------------------------
+    //-----------
     // EX/MEM pipeline
-    //----------------------------------------
+    //-----------
     wire [31:0] writeData_MEM;
-    wire        memRead_MEM, memWrite_MEM, memToReg_MEM, regWrite_MEM;
-    wire [4:0]  rd_MEM;
+    wire memRead_MEM, memWrite_MEM, memToReg_MEM, regWrite_MEM;
+    wire [4:0] rd_MEM;
 
     EX_MEM_PipelineReg ex_mem_reg(
         .clk(clk),
@@ -306,26 +223,28 @@ module PipelinedCPU (
     );
 
     //----------------------------------------
-    // Stage 4: MEM
+    // StageMEM
     //----------------------------------------
     wire [31:0] memReadData_MEM;
-    WrapperMemory wmem(
+
+    StageMEM stageMEM(
         .clk(clk),
-        .rst(start),
-        .memWrite(memWrite_MEM),
-        .memRead(memRead_MEM),
-        .address(aluResult_MEM),
-        .writeData(writeData_MEM),
-        .funct3(funct3_EX), // simplified
-        .readData(memReadData_MEM)
+        .run(start),
+        .memWrite_MEM(memWrite_MEM),
+        .memRead_MEM(memRead_MEM),
+        .aluResult_MEM(aluResult_MEM),
+        .writeData_MEM(writeData_MEM),
+        .funct3_EX(funct3_EX),
+        .memReadData_out(memReadData_MEM)
     );
 
-    //----------------------------------------
+    //-----------
     // MEM/WB pipeline
-    //----------------------------------------
-    wire regWrite_WB, memToReg_WB;
+    //-----------
     wire [31:0] aluResult_WB, memReadData_WB;
-    wire [4:0]  rd_WB;
+    wire memToReg_WB;
+    wire regWrite_WB;
+    wire [4:0] rd_WB;
 
     MEM_WB_PipelineReg mem_wb_reg(
         .clk(clk),
@@ -345,23 +264,23 @@ module PipelinedCPU (
     );
 
     //----------------------------------------
-    // Stage 5: WB
+    // StageWB
     //----------------------------------------
     wire [31:0] finalWBData;
-    Mux2to1 #(32) mux_wb(
-        .sel(memToReg_WB),
-        .s0(aluResult_WB),
-        .s1(memReadData_WB),
-        .out(finalWBData)
+    StageWB stageWB(
+        .memToReg_WB(memToReg_WB),
+        .aluResult_WB(aluResult_WB),
+        .memReadData_WB(memReadData_WB),
+        .finalWBData(finalWBData)
     );
 
     //----------------------------------------
-    // Next PC Logic: Branch or PC+4
+    // Next PC Logic
     //----------------------------------------
-    assign pcNext_IF = (branchTaken_EX) ? branchTarget_EX : pcPlus4_IF;
+    assign pcNext_IF = branchTaken_EX ? (pc_EX + imm_EX) : pcPlus4_IF;
 
     //----------------------------------------
-    // HAZARD DETECTION (load-use stalling)
+    // Hazard Detection
     //----------------------------------------
     wire stallF, stallD, flushE;
     HazardDetection hazard_unit(
@@ -369,38 +288,24 @@ module PipelinedCPU (
         .rs2_ID(rs2_ID),
         .rd_EX(rd_EX),
         .memRead_EX(memRead_EX),
+        .rd_WB(rd_WB),
+        .regWrite_WB(regWrite_WB),
+        .isStore_ID(isStore_ID),
         .stallF(stallF),
         .stallD(stallD),
         .flushE(flushE)
     );
 
-    // Stall signals (load-use hazard):
+
+    //-----------
+    // Stall/Flush logic
+    //-----------
     always @(*) begin
         pcWrite = ~stallF;
     end
     assign if_id_write = ~stallF;
-
-    // ID/EX pipeline stall or flush
     assign id_ex_write = ~stallD;
     assign id_ex_flush = flushE || branchTaken_EX;
     assign if_id_flush = branchTaken_EX;
-
-
-    always @(*) begin
-        // Default: use raw register file outputs
-        readData1_ID = rawReadData1_ID;
-        readData2_ID = rawReadData2_ID;
-
-        // If the WB stage is writing a register that matches rs1_ID, override
-        if (regWrite_WB && (rd_WB != 0) && (rd_WB == rs1_ID)) begin
-            readData1_ID = finalWBData;
-        end
-
-        // Similarly for rs2
-        if (regWrite_WB && (rd_WB != 0) && (rd_WB == rs2_ID)) begin
-            readData2_ID = finalWBData;
-        end
-    end
-
 
 endmodule
